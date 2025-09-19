@@ -1,7 +1,3 @@
-## MoNuSeg for training and testing 
-
-
-
 # Progressive Growing U-Net for Pap Smear Segmentation
 
 A complete implementation of Progressive Growing U-Net (PGU-Net) for medical image segmentation, specifically designed for Pap smear cell segmentation. This implementation follows the progressive growing strategy where the model is trained progressively from low resolution (32×32) to high resolution (256×256).
@@ -73,7 +69,11 @@ pgu-net-rebuild/
 ├── test_compatibility.py    # Compatibility tests
 ├── example_usage.py         # Usage examples
 ├── requirements.txt         # Python dependencies
-└── data/                    # Dataset directory
+├── MoNuSeg/                  # Utilities and scripts for MoNuSeg dataset
+│   ├── train/                # MoNuSeg train split
+│   ├── valid/                # MoNuSeg validation split
+│   └── test/                 # MoNuSeg test split
+└── data/                     # Dataset directory
     ├── train/
     │   ├── images/
     │   └── masks/
@@ -85,18 +85,9 @@ pgu-net-rebuild/
         └── masks/
 ```
 
-## 🛠️ Installation
+Recommendation: For reproducible evaluation and benchmarking, we recommend training and testing the project using the MoNuSeg dataset (place it under the `MoNuSeg/` folder). The codebase includes dataset utilities and evaluation scripts tailored for MoNuSeg; running experiments on this dataset helps validate segmentation performance on a standard nuclei segmentation benchmark.
 
-1. Install dependencies:
-
-```bash
-# Using conda (recommended)
-conda install pytorch==2.5.1 torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
-pip install numpy==2.2.1 matplotlib==3.10.5 scikit-image==0.24.0 scipy==1.13.1 pyparsing==3.1.4
-
-# Or using pip
-pip install -r requirements.txt
-```
+<!-- Duplicate installation block removed (see top of file for installation instructions) -->
 
 ## 📊 Dataset Preparation
 
@@ -351,12 +342,9 @@ outputs = model(input_image, return_all_scales=True)
 ## 📚 References
 
 1. **PGU-net+**: Progressive Growing of U-net+ for Automated Cervical Nuclei Segmentation (MICCAI 2019)
-2. **Progressive GAN**: Progressive Growing of GANs for Improved Quality, Stability, and Variation
-3. **U-Net**: Convolutional Networks for Biomedical Image Segmentation
-
-## 🤝 Contributing
-
-Feel free to submit issues, feature requests, or pull requests to improve this implementation.
+2. Sowmya, A. R., et al. "Progressive Growing U-Net+ for Cervical Nuclei Segmentation". In: MICCAI 2019 Workshop/Chapter. Available: [Springer link](https://link.springer.com/chapter/10.1007/978-3-030-37969-8_7)
+3. **Progressive GAN**: Progressive Growing of GANs for Improved Quality, Stability, and Variation
+4. **U-Net**: Convolutional Networks for Biomedical Image Segmentation
 
 ## 📄 License
 
@@ -370,7 +358,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Medical imaging community for Pap smear datasets
 
 ---
-
-## Getting Started
-
-Happy training with Progressive Growing U-Net! 🚀
