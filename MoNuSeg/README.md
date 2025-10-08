@@ -2,6 +2,8 @@
 
 This directory contains a complete implementation of Progressive Growing U-Net for the Multi-organ Nuclei Segmentation (MoNuSeg) challenge dataset.
 
+https://drive.google.com/file/d/19uiEHEwMO46YZCf-d8OWIGiTkkQMnd53/view?usp=sharing
+
 ## Overview
 
 The MoNuSeg dataset contains 37 H&E stained tissue images (1000×1000 pixels) from multiple organs with pixel-wise nuclear boundary annotations in XML format. Our implementation uses a progressive growing strategy to train U-Net models at multiple resolutions.
