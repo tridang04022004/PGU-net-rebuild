@@ -42,10 +42,9 @@ class MoNuSegInferer:
         print(f"Inferer using device: {self.device}")
 
         # Load model using the existing evaluator loader to keep parity
-        evaluator = MoNuSegEvaluator.__new__(MoNuSegEvaluator)
-        # Bypass __init__ but reuse load_model
-        evaluator.device = self.device
-        self.model = MoNuSegEvaluator.load_model(evaluator, model_path)
+        # Create a proper evaluator instance and reuse its model
+        evaluator = MoNuSegEvaluator(model_path, device=self.device)
+        self.model = evaluator.model
         self.model.eval()
 
     def infer_image(self, image_path: str, target_size: int = 256):
@@ -121,12 +120,22 @@ class MoNuSegEvaluator:
     def load_model(self, model_path: str) -> nn.Module:
         """Load trained model from checkpoint"""
         print(f"Loading model from: {model_path}")
-        
-        checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
-        
-        # Determine which stage model to load based on checkpoint
-        stage = checkpoint.get('stage', 4)
-        print(f"Loading Stage {stage} model")
+        # Load the checkpoint/state dict safely
+        checkpoint = torch.load(model_path, map_location=self.device)
+
+        # Determine whether checkpoint is a full checkpoint dict (with metadata)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            stage = checkpoint.get('stage', 4)
+            state_dict = checkpoint['model_state_dict']
+            print(f"Loading Stage {stage} model from checkpoint dict")
+        elif isinstance(checkpoint, dict) and all(isinstance(v, torch.Tensor) for v in checkpoint.values()):
+            # Looks like a state_dict saved directly
+            stage = 4
+            state_dict = checkpoint
+            print("Loading model from raw state_dict (assuming stage 4)")
+        else:
+            # Unknown checkpoint format
+            raise RuntimeError(f"Unrecognized checkpoint format for: {model_path}")
         
         # Import the specific stage model
         sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -143,15 +152,15 @@ class MoNuSegEvaluator:
         model_class = stage_models.get(stage, PGUNet4)  # Default to stage 4
         model = model_class(in_channels=3, num_classes=1)
         
-        # Load state dict
-        if 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'])
+        # Load state dict into model
+        model.load_state_dict(state_dict)
+        # If checkpoint was a full dict, print extra info
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             epoch = checkpoint.get('epoch', 'unknown')
             val_dice = checkpoint.get('val_dice', 'unknown')
             print(f"Loaded model from stage {stage}, epoch {epoch}, val_dice: {val_dice}")
         else:
-            model.load_state_dict(checkpoint)
-            print("Loaded model state dict directly")
+            print("Loaded model state dict")
         
         model.to(self.device)
         return model
@@ -415,7 +424,24 @@ def main():
     print(f"Dataset: {args.data}")
     print(f"Split: {args.split}")
     print("=" * 50)
-    
+    # Resolve dataset path: if user passed parent directory (e.g., '..'), try to locate MoNuSeg subfolder
+    dataset_path = args.data
+    expected_images = os.path.join(dataset_path, args.split, 'images')
+    if not os.path.exists(expected_images):
+        # Try common alternative: user passed parent folder containing MoNuSeg
+        candidate = os.path.join(dataset_path, 'MoNuSeg')
+        candidate_images = os.path.join(candidate, args.split, 'images')
+        if os.path.exists(candidate_images):
+            print(f"Note: adjusted dataset path to: {candidate}")
+            dataset_path = candidate
+        else:
+            raise FileNotFoundError(
+                f"Could not find '{args.split}/images' under dataset path '{dataset_path}'.\n"
+                f"Please pass the path to the MoNuSeg dataset directory (the folder that contains 'train', 'val', 'test').\n"
+                f"Example: --data ./MoNuSeg"
+            )
+    # Ensure subsequent code uses the resolved dataset path
+    args.data = dataset_path
     # Initialize evaluator
     evaluator = MoNuSegEvaluator(args.model)
     

@@ -178,10 +178,67 @@ class ProgressiveUNet(nn.Module):
         This is a simplified version - in practice, you'd need more sophisticated
         weight mapping based on layer correspondence
         """
-        # This is a placeholder for weight transfer logic
-        # The actual implementation would need careful mapping of layers
-        # between stages based on the architectural differences
-        return current_stage_dict
+        # A light-weight automatic transfer routine:
+        # - If a key exists in both state_dicts and shapes match -> copy fully
+        # - If shapes differ but both are tensors, attempt a partial copy on the
+        #   leading dimensions (common practice for conv/linear weight copying)
+        # - Otherwise leave the current value as initialized
+        prev = prev_stage_dict
+        cur = current_stage_dict
+        new_state = {k: v.clone() for k, v in cur.items()}
+        copied_keys = []
+
+        for k, pv in prev.items():
+            if k not in cur:
+                continue
+            cv = cur[k]
+            # Only operate on tensors
+            if not isinstance(pv, torch.Tensor) or not isinstance(cv, torch.Tensor):
+                continue
+
+            # Exact shape match -> copy
+            if pv.shape == cv.shape:
+                new_state[k] = pv.clone()
+                copied_keys.append(k)
+                continue
+
+            # Partial copy heuristics for common tensor shapes
+            try:
+                if pv.ndim == 4 and cv.ndim == 4:
+                    # Conv weight: (out, in, kH, kW)
+                    out_c = min(pv.shape[0], cv.shape[0])
+                    in_c = min(pv.shape[1], cv.shape[1])
+                    tmp = cv.clone()
+                    tmp[:out_c, :in_c, :, :] = pv[:out_c, :in_c, :, :]
+                    new_state[k] = tmp
+                    copied_keys.append(k)
+                    continue
+
+                if pv.ndim == 2 and cv.ndim == 2:
+                    # Linear weight: (out, in)
+                    out_c = min(pv.shape[0], cv.shape[0])
+                    in_c = min(pv.shape[1], cv.shape[1])
+                    tmp = cv.clone()
+                    tmp[:out_c, :in_c] = pv[:out_c, :in_c]
+                    new_state[k] = tmp
+                    copied_keys.append(k)
+                    continue
+
+                if pv.ndim == 1 and cv.ndim == 1:
+                    # Bias / BN running_*: (num_features,)
+                    length = min(pv.shape[0], cv.shape[0])
+                    tmp = cv.clone()
+                    tmp[:length] = pv[:length]
+                    new_state[k] = tmp
+                    copied_keys.append(k)
+                    continue
+            except Exception:
+                # If any unexpected shape issues occur, skip copying this key
+                continue
+
+        # Lightweight logging to help debugging when this is used interactively
+        print(f"transfer_weights(stage={stage}): copied {len(copied_keys)} keys (examples: {copied_keys[:5]})")
+        return new_state
 
     def forward(self, x, target_resolution=None):
         """
