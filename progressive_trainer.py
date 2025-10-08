@@ -212,11 +212,14 @@ class ProgressiveTrainer:
                 print(f'Stage {stage}, Batch {batch_idx}, Loss: {loss.item():.4f}, '
                       f'Dice: {dice.item():.4f}, Acc: {accuracy:.4f}')
         
-        avg_loss = total_loss / len(dataloader)
-        avg_dice = total_dice / len(dataloader)
-        avg_accuracy = total_accuracy / len(dataloader)
-        
-        return avg_loss, avg_dice, avg_accuracy
+            avg_loss = total_loss / len(dataloader)
+            avg_dice = total_dice / len(dataloader)
+            avg_accuracy = total_accuracy / len(dataloader)
+
+            # Report number of batches processed
+            print(f"Stage {stage} training epoch completed. Batches processed: {len(dataloader)}")
+
+            return avg_loss, avg_dice, avg_accuracy
 
     def validate_epoch(self, dataloader, stage):
         """Validate for one epoch"""
@@ -255,7 +258,10 @@ class ProgressiveTrainer:
         avg_loss = total_loss / len(dataloader)
         avg_dice = total_dice / len(dataloader)
         avg_accuracy = total_accuracy / len(dataloader)
-        
+
+        # Report number of batches processed
+        print(f"Stage {stage} validation epoch completed. Batches processed: {len(dataloader)}")
+
         return avg_loss, avg_dice, avg_accuracy
 
     def train_progressive(self, train_loader, val_loader, max_stages=4, save_dir='./progressive_weights'):

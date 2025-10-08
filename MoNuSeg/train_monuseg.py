@@ -38,7 +38,7 @@ class MoNuSegTrainer(ProgressiveTrainer):
         )
         
         # Override stage configurations with config values
-        epochs_per_stage = config.get('num_epochs_per_stage', 10)
+        epochs_per_stage = config.get('num_epochs_per_stage', 50)
         self.stage_configs = {
             1: {'resolution': 32, 'epochs_per_stage': epochs_per_stage, 'lr': 3e-4},
             2: {'resolution': 64, 'epochs_per_stage': epochs_per_stage, 'lr': 1e-4},
@@ -177,7 +177,10 @@ class MoNuSegTrainer(ProgressiveTrainer):
         train_loss /= num_batches
         for key in train_metrics:
             train_metrics[key] /= num_batches
-        
+
+        # Report batches processed for visibility
+        print(f"Stage {stage} training epoch completed. Batches processed: {num_batches}")
+
         return train_loss, train_metrics['dice'], train_metrics['accuracy']
     
     def validate_epoch(self, dataloader, stage):
@@ -211,7 +214,10 @@ class MoNuSegTrainer(ProgressiveTrainer):
         val_loss /= num_batches
         for key in val_metrics:
             val_metrics[key] /= num_batches
-        
+
+        # Report batches processed for visibility
+        print(f"Stage {stage} validation epoch completed. Batches processed: {num_batches}")
+
         return val_loss, val_metrics['dice'], val_metrics['accuracy']
 
 
@@ -229,7 +235,7 @@ def create_config():
         # Training settings
         'batch_size': 8,
         'learning_rate': 0.001,
-        'num_epochs_per_stage': 10,
+        'num_epochs_per_stage': 50,
         'num_workers': 4,
         'log_interval': 10,
         
