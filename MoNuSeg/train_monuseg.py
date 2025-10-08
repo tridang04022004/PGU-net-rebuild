@@ -86,6 +86,35 @@ class MoNuSegTrainer(ProgressiveTrainer):
         print(f"Dataset setup complete:")
         print(f"  Training samples: {len(self.train_datasets[1])}")
         print(f"  Validation samples: {len(self.val_datasets[1])}")
+
+        # Compute pos_weight automatically from training set (use highest-resolution train split)
+        try:
+            print("Computing positive class weight from training masks...")
+            # Create a non-augmented dataset to compute true pixel ratio
+            stats_ds = MoNuSegDataset(
+                data_dir=self.config['data_dir'],
+                image_size=self.get_image_size_for_stage(4),
+                split='train',
+                transform=True,
+                augment=False
+            )
+
+            total_pos = 0.0
+            total_pix = 0
+            for i in range(len(stats_ds)):
+                _, mask = stats_ds[i]
+                # mask shape: (1, H, W)
+                total_pos += mask.sum().item()
+                total_pix += mask.numel()
+
+            pos_ratio = (total_pos / total_pix) if total_pix > 0 else 0.0
+            computed_pos_weight = float((1.0 - pos_ratio) / (pos_ratio + 1e-8))
+
+            # Override criterion with computed pos_weight
+            self.criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([computed_pos_weight]).to(self.device))
+            print(f"Auto pos_weight={computed_pos_weight:.3f} (positive ratio={pos_ratio:.4f}) set for BCEWithLogitsLoss")
+        except Exception as e:
+            print(f"Warning: failed to compute pos_weight automatically: {e}. Using default criterion.")
     
     def get_image_size_for_stage(self, stage):
         """Get appropriate image size for each training stage"""
@@ -137,6 +166,15 @@ class MoNuSegTrainer(ProgressiveTrainer):
             'precision': precision.item(),
             'recall': recall.item()
         }
+
+    def soft_dice_loss(self, outputs, targets, smooth=1e-6):
+        """Differentiable soft Dice loss computed on probabilities."""
+        probs = torch.sigmoid(outputs)
+        probs_flat = probs.view(probs.size(0), -1)
+        targets_flat = targets.view(targets.size(0), -1)
+        intersection = (probs_flat * targets_flat).sum(dim=1)
+        dice = (2. * intersection + smooth) / (probs_flat.sum(dim=1) + targets_flat.sum(dim=1) + smooth)
+        return 1.0 - dice.mean()
     
     def train_epoch(self, dataloader, stage):
         """Enhanced training with nuclei-specific metrics logging"""
@@ -156,7 +194,12 @@ class MoNuSegTrainer(ProgressiveTrainer):
             
             self.optimizer.zero_grad()
             output = self.current_model(data)
-            loss = self.criterion(output, target)
+
+            # Hybrid loss: BCEWithLogits + dice_weight * (1 - Dice)
+            bce_loss = self.criterion(output, target)
+            dice_loss = self.soft_dice_loss(output, target)
+            loss = bce_loss + self.config.get('dice_weight', 1.0) * dice_loss
+
             loss.backward()
             self.optimizer.step()
             
@@ -201,7 +244,10 @@ class MoNuSegTrainer(ProgressiveTrainer):
                 target = F.interpolate(target, size=(resolution, resolution), mode='nearest')
                 
                 output = self.current_model(data)
-                loss = self.criterion(output, target)
+                # compute validation loss with same hybrid formula for reporting
+                bce_loss = self.criterion(output, target)
+                dice_loss = self.soft_dice_loss(output, target)
+                loss = bce_loss + self.config.get('dice_weight', 1.0) * dice_loss
                 val_loss += loss.item()
                 
                 # Calculate nuclei metrics
@@ -261,7 +307,7 @@ def main():
     parser = argparse.ArgumentParser(description='Train Progressive Growing U-Net on MoNuSeg')
     parser.add_argument('--stages', nargs='+', type=int, default=[1, 2, 3, 4],
                         help='Training stages to run (default: all stages)')
-    parser.add_argument('--epochs', type=int, default=10,
+    parser.add_argument('--epochs', type=int, default=50,
                         help='Number of epochs per stage')
     parser.add_argument('--batch_size', type=int, default=8,
                         help='Batch size for training')
